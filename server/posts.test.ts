@@ -178,7 +178,7 @@ describe("Notifications API", () => {
 
     expect(notifications.length).toBeGreaterThan(0);
     const commentNotification = notifications.find(
-      (n) => n.type === "comment" && n.contentId === post.id
+      (n) => n.type === "comment" && n.content === `评论了您的帖子：测试通知功能`
     );
     expect(commentNotification).toBeDefined();
   });
@@ -190,7 +190,7 @@ describe("Notifications API", () => {
     const notifications = await caller.notifications.list({ unreadOnly: true });
 
     if (notifications.length > 0) {
-      const result = await caller.notifications.markAsRead({ id: notifications[0].id });
+      const result = await caller.notifications.markRead({ id: notifications[0].id });
       expect(result.success).toBe(true);
     }
   });

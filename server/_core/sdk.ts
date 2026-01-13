@@ -4,7 +4,7 @@ import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
-import type { User } from "../../drizzle/schema";
+import type { InsertUser, User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
 import type {
@@ -39,8 +39,20 @@ class OAuthService {
   }
 
   private decodeState(state: string): string {
-    const redirectUri = atob(state);
-    return redirectUri;
+    try {
+      const decoded = atob(state);
+      try {
+        const json = JSON.parse(decoded);
+        if (json && typeof json === "object" && json.redirectUri) {
+          return json.redirectUri;
+        }
+      } catch {
+        // Not JSON, use decoded string as is
+      }
+      return decoded;
+    } catch {
+      return "";
+    }
   }
 
   async getTokenByCode(
@@ -89,6 +101,23 @@ class SDKServer {
   constructor(client: AxiosInstance = createOAuthHttpClient()) {
     this.client = client;
     this.oauthService = new OAuthService(this.client);
+  }
+
+  public parseState(state: string): { redirectUri: string; returnTo?: string } {
+    try {
+      const decoded = atob(state);
+      try {
+        const json = JSON.parse(decoded);
+        if (json && typeof json === "object" && json.redirectUri) {
+          return { redirectUri: json.redirectUri, returnTo: json.returnTo };
+        }
+      } catch {
+        // Not JSON
+      }
+      return { redirectUri: decoded };
+    } catch {
+      return { redirectUri: "" };
+    }
   }
 
   private deriveLoginMethod(
@@ -201,7 +230,7 @@ class SDKServer {
     cookieValue: string | undefined | null
   ): Promise<{ openId: string; appId: string; name: string } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
+      // Session cookie is missing, which is normal for unauthenticated users
       return null;
     }
 
@@ -292,10 +321,15 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
+    // Only update lastSignedIn if it's been more than 5 minutes
+    // to avoid excessive DB writes on every request
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (!user.lastSignedIn || user.lastSignedIn < fiveMinutesAgo) {
+      await db.upsertUser({
+        openId: user.openId,
+        lastSignedIn: signedInAt,
+      });
+    }
 
     return user;
   }

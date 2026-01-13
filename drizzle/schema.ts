@@ -1,4 +1,5 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, index } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, index, primaryKey } from "drizzle-orm/mysql-core";
+import { type InferInsertModel, type InferSelectModel } from "drizzle-orm";
 
 /**
  * 核心用户表,支持员工信息管理
@@ -6,6 +7,8 @@ import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, index } 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
+  username: varchar("username", { length: 50 }).unique(),
+  password: varchar("password", { length: 255 }),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
@@ -97,7 +100,6 @@ export const articles = mysqlTable("articles", {
 }, (table) => ({
   authorIdx: index("articles_author_idx").on(table.authorId),
   categoryIdx: index("articles_category_idx").on(table.categoryId),
-  publishedIdx: index("articles_published_idx").on(table.published),
   createdAtIdx: index("articles_created_at_idx").on(table.createdAt),
 }));
 
@@ -118,31 +120,34 @@ export const articleTags = mysqlTable("article_tags", {
  */
 export const comments = mysqlTable("comments", {
   id: int("id").autoincrement().primaryKey(),
-  authorId: int("authorId").notNull(),
-  contentType: mysqlEnum("contentType", ["post", "article"]).notNull(),
-  contentId: int("contentId").notNull(), // 帖子或文章ID
-  parentId: int("parentId"), // 父评论ID,支持嵌套评论
   content: text("content").notNull(),
+  authorId: int("authorId").notNull(),
+  postId: int("postId"), // 可关联帖子
+  articleId: int("articleId"), // 可关联文章
+  parentId: int("parentId"), // 父评论ID（回复）
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   authorIdx: index("comments_author_idx").on(table.authorId),
-  contentIdx: index("comments_content_idx").on(table.contentType, table.contentId),
+  postIdx: index("comments_post_idx").on(table.postId),
+  articleIdx: index("comments_article_idx").on(table.articleId),
   parentIdx: index("comments_parent_idx").on(table.parentId),
 }));
 
 /**
- * 点赞表
+ * 点赞表 (用于帖子、文章、评论等)
  */
 export const likes = mysqlTable("likes", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  contentType: mysqlEnum("contentType", ["post", "article"]).notNull(),
-  contentId: int("contentId").notNull(),
+  targetType: mysqlEnum("targetType", ["post", "article", "comment"]).notNull(),
+  targetId: int("targetId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
-  userContentIdx: index("likes_user_content_idx").on(table.userId, table.contentType, table.contentId),
-  contentIdx: index("likes_content_idx").on(table.contentType, table.contentId),
+  userIdx: index("likes_user_idx").on(table.userId),
+  targetIdx: index("likes_target_idx").on(table.targetType, table.targetId),
+  // 联合唯一约束，防止重复点赞
+  uniqueLike: index("unique_like_idx").on(table.userId, table.targetType, table.targetId),
 }));
 
 /**
@@ -151,12 +156,76 @@ export const likes = mysqlTable("likes", {
 export const bookmarks = mysqlTable("bookmarks", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  contentType: mysqlEnum("contentType", ["post", "article"]).notNull(),
-  contentId: int("contentId").notNull(),
+  targetType: mysqlEnum("targetType", ["post", "article"]).notNull(),
+  targetId: int("targetId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
-  userContentIdx: index("bookmarks_user_content_idx").on(table.userId, table.contentType, table.contentId),
   userIdx: index("bookmarks_user_idx").on(table.userId),
+  targetIdx: index("bookmarks_target_idx").on(table.targetType, table.targetId),
+  // 联合唯一约束
+  uniqueBookmark: index("unique_bookmark_idx").on(table.userId, table.targetType, table.targetId),
+}));
+
+/**
+ * 心声社区表 (Heart Voices)
+ */
+export const heartVoices = mysqlTable("heart_voices", {
+  id: int("id").autoincrement().primaryKey(),
+  authorId: int("authorId").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  age: int("age"),
+  gender: mysqlEnum("gender", ["male", "female", "other"]),
+  location: varchar("location", { length: 100 }),
+  isAnonymous: boolean("isAnonymous").default(false).notNull(),
+  likesCount: int("likesCount").default(0).notNull(),
+  commentsCount: int("commentsCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  authorIdx: index("heart_voices_author_idx").on(table.authorId),
+  createdAtIdx: index("heart_voices_created_at_idx").on(table.createdAt),
+}));
+
+/**
+ * 轮播图表
+ */
+export const carousels = mysqlTable("carousels", {
+  id: int("id").autoincrement().primaryKey(),
+  imageUrl: varchar("imageUrl", { length: 500 }).notNull(),
+  title: varchar("title", { length: 200 }),
+  linkUrl: varchar("linkUrl", { length: 500 }),
+  order: int("order").default(0).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * 用户标签表
+ */
+export const userTags = mysqlTable("user_tags", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  label: varchar("label", { length: 50 }).notNull(),
+  voteCount: int("voteCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("user_tags_user_idx").on(table.userId),
+}));
+
+/**
+ * 用户标签投票记录表
+ */
+export const userTagVotes = mysqlTable("user_tag_votes", {
+  id: int("id").autoincrement().primaryKey(),
+  userTagId: int("userTagId").notNull(),
+  voterId: int("voterId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  userTagIdx: index("user_tag_votes_tag_idx").on(table.userTagId),
+  voterIdx: index("user_tag_votes_voter_idx").on(table.voterId),
+  uniqueVote: index("unique_user_tag_vote_idx").on(table.userTagId, table.voterId),
 }));
 
 /**
@@ -164,33 +233,60 @@ export const bookmarks = mysqlTable("bookmarks", {
  */
 export const notifications = mysqlTable("notifications", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(), // 接收通知的用户
-  actorId: int("actorId").notNull(), // 触发通知的用户
-  type: mysqlEnum("type", ["comment", "like", "bookmark", "mention"]).notNull(),
-  contentType: mysqlEnum("contentType", ["post", "article", "comment"]).notNull(),
-  contentId: int("contentId").notNull(),
-  read: boolean("read").default(false).notNull(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("type", ["system", "like", "comment", "reply"]).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content"),
+  linkUrl: varchar("linkUrl", { length: 500 }),
+  isRead: boolean("isRead").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   userIdx: index("notifications_user_idx").on(table.userId),
-  readIdx: index("notifications_read_idx").on(table.read),
+  readIdx: index("notifications_read_idx").on(table.isRead),
 }));
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
-export type Category = typeof categories.$inferSelect;
-export type InsertCategory = typeof categories.$inferInsert;
-export type Tag = typeof tags.$inferSelect;
-export type InsertTag = typeof tags.$inferInsert;
-export type Post = typeof posts.$inferSelect;
-export type InsertPost = typeof posts.$inferInsert;
-export type Article = typeof articles.$inferSelect;
-export type InsertArticle = typeof articles.$inferInsert;
-export type Comment = typeof comments.$inferSelect;
-export type InsertComment = typeof comments.$inferInsert;
-export type Like = typeof likes.$inferSelect;
-export type InsertLike = typeof likes.$inferInsert;
-export type Bookmark = typeof bookmarks.$inferSelect;
-export type InsertBookmark = typeof bookmarks.$inferInsert;
-export type Notification = typeof notifications.$inferSelect;
-export type InsertNotification = typeof notifications.$inferInsert;
+export type InsertUser = InferInsertModel<typeof users>;
+export type SelectUser = InferSelectModel<typeof users>;
+export type User = SelectUser;
+
+export type InsertCategory = InferInsertModel<typeof categories>;
+export type SelectCategory = InferSelectModel<typeof categories>;
+
+export type InsertTag = InferInsertModel<typeof tags>;
+export type SelectTag = InferSelectModel<typeof tags>;
+
+export type InsertPost = InferInsertModel<typeof posts>;
+export type SelectPost = InferSelectModel<typeof posts>;
+
+export type InsertPostTag = InferInsertModel<typeof postTags>;
+export type SelectPostTag = InferSelectModel<typeof postTags>;
+
+export type InsertArticle = InferInsertModel<typeof articles>;
+export type SelectArticle = InferSelectModel<typeof articles>;
+
+export type InsertArticleTag = InferInsertModel<typeof articleTags>;
+export type SelectArticleTag = InferSelectModel<typeof articleTags>;
+
+export type InsertComment = InferInsertModel<typeof comments>;
+export type SelectComment = InferSelectModel<typeof comments>;
+
+export type InsertLike = InferInsertModel<typeof likes>;
+export type SelectLike = InferSelectModel<typeof likes>;
+
+export type InsertBookmark = InferInsertModel<typeof bookmarks>;
+export type SelectBookmark = InferSelectModel<typeof bookmarks>;
+
+export type InsertHeartVoice = InferInsertModel<typeof heartVoices>;
+export type SelectHeartVoice = InferSelectModel<typeof heartVoices>;
+
+export type InsertCarousel = InferInsertModel<typeof carousels>;
+export type SelectCarousel = InferSelectModel<typeof carousels>;
+
+export type InsertUserTag = InferInsertModel<typeof userTags>;
+export type SelectUserTag = InferSelectModel<typeof userTags>;
+
+export type InsertUserTagVote = InferInsertModel<typeof userTagVotes>;
+export type SelectUserTagVote = InferSelectModel<typeof userTagVotes>;
+
+export type InsertNotification = InferInsertModel<typeof notifications>;
+export type SelectNotification = InferSelectModel<typeof notifications>;

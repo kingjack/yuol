@@ -11,23 +11,23 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
-export default function PostDetail() {
+export default function ArticleDetail() {
   const { id } = useParams();
   const { user, isAuthenticated } = useAuth();
   const [commentContent, setCommentContent] = useState("");
   const utils = trpc.useUtils();
 
-  const postId = parseInt(id || "0");
-  const { data: post, isLoading } = trpc.posts.get.useQuery(postId);
+  const articleId = parseInt(id || "0");
+  const { data: article, isLoading } = trpc.articles.get.useQuery(articleId);
   const { data: comments } = trpc.comments.list.useQuery({
-    contentType: "post",
-    contentId: postId,
+    contentType: "article",
+    contentId: articleId,
   });
 
   const createCommentMutation = trpc.comments.create.useMutation({
     onSuccess: () => {
       utils.comments.list.invalidate();
-      utils.posts.get.invalidate();
+      utils.articles.get.invalidate();
       setCommentContent("");
       toast.success("评论成功!");
     },
@@ -35,13 +35,13 @@ export default function PostDetail() {
 
   const likeMutation = trpc.likes.toggle.useMutation({
     onSuccess: () => {
-      utils.posts.get.invalidate();
+      utils.articles.get.invalidate();
     },
   });
 
   const bookmarkMutation = trpc.bookmarks.toggle.useMutation({
     onSuccess: () => {
-      utils.posts.get.invalidate();
+      utils.articles.get.invalidate();
     },
   });
 
@@ -58,8 +58,8 @@ export default function PostDetail() {
       return;
     }
     createCommentMutation.mutate({
-      contentType: "post",
-      contentId: postId,
+      contentType: "article",
+      contentId: articleId,
       content: commentContent,
     });
   };
@@ -72,14 +72,14 @@ export default function PostDetail() {
     );
   }
 
-  if (!post) {
+  if (!article) {
     return (
       <div className="min-h-screen dramatic-gradient flex items-center justify-center">
         <Card className="cinematic-blur dramatic-shadow border-border/50 p-8">
           <CardContent className="text-center">
-            <p className="text-muted-foreground mb-4">帖子不存在</p>
-            <Link href="/posts">
-              <Button>返回动态列表</Button>
+            <p className="text-muted-foreground mb-4">文章不存在</p>
+            <Link href="/articles">
+              <Button>返回文章列表</Button>
             </Link>
           </CardContent>
         </Card>
@@ -93,33 +93,43 @@ export default function PostDetail() {
       <nav className="cinematic-blur border-b border-border/50 sticky top-0 z-50">
         <div className="container py-4">
           <div className="flex items-center gap-4">
-            <Link href="/posts">
+            <Link href="/articles">
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <h1 className="text-xl font-bold">动态详情</h1>
+            <h1 className="text-xl font-bold">文章详情</h1>
           </div>
         </div>
       </nav>
 
       <div className="container py-8">
         <div className="max-w-3xl mx-auto space-y-6">
-          {/* 帖子内容 */}
-          <Card className="cinematic-blur dramatic-shadow border-border/50">
+          {/* 文章内容 */}
+          <Card className="cinematic-blur dramatic-shadow border-border/50 overflow-hidden">
+            {article.coverImage && (
+              <div className="w-full h-64 overflow-hidden">
+                <img 
+                  src={article.coverImage} 
+                  alt={article.title} 
+                  className="w-full h-full object-cover transition-transform hover:scale-105 duration-700"
+                />
+              </div>
+            )}
             <CardHeader>
+              <h1 className="text-3xl font-bold mb-4">{article.title}</h1>
               <div className="flex items-center gap-3">
                 <Avatar>
                   <AvatarFallback className="bg-primary/20 text-primary">
-                    {post.author?.name?.[0] || post.authorId}
+                    {article.author?.name?.[0] || article.authorId}
                   </AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="font-semibold">
-                    {post.author?.name || `用户${post.authorId}`}
+                    {article.author?.name || `用户${article.authorId}`}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    {formatDistanceToNow(new Date(post.createdAt), {
+                    {formatDistanceToNow(new Date(article.createdAt), {
                       addSuffix: true,
                       locale: zhCN,
                     })}
@@ -128,10 +138,16 @@ export default function PostDetail() {
               </div>
             </CardHeader>
             <CardContent>
-              {post.title && <h2 className="font-bold text-2xl mb-4">{post.title}</h2>}
-              <p className="whitespace-pre-wrap text-lg">{post.content}</p>
+              {article.summary && (
+                <div className="bg-muted/30 p-4 rounded-lg mb-6 text-muted-foreground italic border-l-4 border-primary/50">
+                  {article.summary}
+                </div>
+              )}
+              <div className="prose prose-invert max-w-none">
+                <p className="whitespace-pre-wrap text-lg leading-relaxed">{article.content}</p>
+              </div>
             </CardContent>
-            <CardFooter className="flex items-center gap-6 text-muted-foreground">
+            <CardFooter className="flex items-center gap-6 text-muted-foreground border-t border-border/30 pt-4 mt-2">
               <Button
                 variant="ghost"
                 size="sm"
@@ -141,15 +157,15 @@ export default function PostDetail() {
                     toast.error("请先登录");
                     return;
                   }
-                  likeMutation.mutate({ contentType: "post", contentId: post.id });
+                  likeMutation.mutate({ contentType: "article", contentId: article.id });
                 }}
               >
                 <Heart className="w-4 h-4" />
-                {post.likesCount || 0}
+                {article.likesCount || 0}
               </Button>
               <div className="flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
-                {post.commentsCount || 0}
+                {article.commentsCount || 0}
               </div>
               <Button
                 variant="ghost"
@@ -160,11 +176,11 @@ export default function PostDetail() {
                     toast.error("请先登录");
                     return;
                   }
-                  bookmarkMutation.mutate({ contentType: "post", contentId: post.id });
+                  bookmarkMutation.mutate({ contentType: "article", contentId: article.id });
                 }}
               >
                 <Bookmark className="w-4 h-4" />
-                {post.bookmarksCount || 0}
+                {article.bookmarksCount || 0}
               </Button>
             </CardFooter>
           </Card>

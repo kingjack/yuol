@@ -1,0 +1,50 @@
+{
+  "date": "2026-01-13",
+  "items": [
+    {
+      "id": 1,
+      "title": "清纯校花",
+      "description": "每日精选 · 自动更新",
+      "imageUrl": "https://image.pollinations.ai/prompt/beautiful%20asian%20school%20girl%2C%20pure%20face%2C%20black%20hair%2C%20natural%20makeup%2C%20soft%20sunlight%2C%20high%20school%20uniform%2C%208k%20photography?width=1200&height=600&nologo=true&seed=2026-01-13-0&model=flux-realism",
+      "link": "#",
+      "order": 0,
+      "active": true
+    },
+    {
+      "id": 2,
+      "title": "职场丽人",
+      "description": "每日精选 · 自动更新",
+      "imageUrl": "https://image.pollinations.ai/prompt/professional%20asian%20business%20woman%2C%20office%20lady%2C%20white%20shirt%2C%20elegant%20smile%2C%20modern%20office%20background%2C%20cinematic%20lighting%2C%20photorealistic?width=1200&height=600&nologo=true&seed=2026-01-13-1&model=flux-realism",
+      "link": "#",
+      "order": 1,
+      "active": true
+    },
+    {
+      "id": 3,
+      "title": "古风汉服",
+      "description": "每日精选 · 自动更新",
+      "imageUrl": "https://image.pollinations.ai/prompt/chinese%20traditional%20hanfu%20girl%2C%20ancient%20style%2C%20elegant%2C%20garden%20background%2C%20ethereal%2C%20masterpiece%2C%20best%20quality?width=1200&height=600&nologo=true&seed=2026-01-13-2&model=flux-realism",
+      "link": "#",
+      "order": 2,
+      "active": true
+    },
+    {
+      "id": 4,
+      "title": "街拍潮流",
+      "description": "每日精选 · 自动更新",
+      "imageUrl": "https://image.pollinations.ai/prompt/trendy%20asian%20fashion%20model%2C%20street%20snap%2C%20shanghai%20street%20background%2C%20stylish%20outfit%2C%20cool%20vibe%2C%2035mm%20film%20look?width=1200&height=600&nologo=true&seed=2026-01-13-3&model=flux-realism",
+      "link": "#",
+      "order": 3,
+      "active": true
+    },
+    {
+      "id": 5,
+      "title": "运动活力",
+      "description": "每日精选 · 自动更新",
+      "imageUrl": "https://image.pollinations.ai/prompt/fit%20asian%20girl%2C%20gym%20wear%2C%20yoga%2C%20healthy%20lifestyle%2C%20sweat%2C%20energetic%20smile%2C%20bright%20lighting%2C%20realistic%20skin%20texture?width=1200&height=600&nologo=true&seed=2026-01-13-4&model=flux-realism",
+      "link": "#",
+      "order": 4,
+      "active": true
+    }
+  ]
+}

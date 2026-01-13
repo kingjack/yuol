@@ -11,17 +11,28 @@ import Articles from "./pages/Articles";
 import Calendar from "./pages/Calendar";
 import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
+import Search from "./pages/Search";
+import HeartVoices from "./pages/HeartVoices";
+import ArticleEditor from "./pages/ArticleEditor";
+import ArticleDetail from "./pages/ArticleDetail";
+import Login from "./pages/Login";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
       <Route path="/posts" component={Posts} />
       <Route path="/posts/:id" component={PostDetail} />
       <Route path="/articles" component={Articles} />
       <Route path="/calendar" component={Calendar} />
       <Route path="/profile" component={Profile} />
+      <Route path="/profile/:id" component={Profile} />
       <Route path="/notifications" component={Notifications} />
+      <Route path="/search" component={Search} />
+      <Route path="/heart-voices" component={HeartVoices} />
+      <Route path="/articles/new" component={ArticleEditor} />
+      <Route path="/articles/:id" component={ArticleDetail} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

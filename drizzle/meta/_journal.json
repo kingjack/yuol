@@ -15,6 +15,27 @@
       "when": 1767061860133,
       "tag": "0001_perpetual_sumo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1767084783641,
+      "tag": "0002_sweet_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1768138597479,
+      "tag": "0003_lame_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1768301931802,
+      "tag": "0004_even_misty_knight",
+      "breakpoints": true
     }
   ]
 }

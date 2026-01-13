@@ -7,6 +7,11 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { getSessionCookieOptions } from "./cookies";
+import { sdk } from "./sdk";
+import * as db from "../db";
+import { users } from "../../drizzle/schema";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -35,6 +40,58 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Development helper: dev-login/dev-logout
+  if (process.env.NODE_ENV === "development") {
+    app.get("/api/dev-login", async (req, res) => {
+      const openId = (req.query.openId as string) || "dev-user";
+      const name = (req.query.name as string) || "Dev User";
+      try {
+        await db.upsertUser({
+          openId,
+          name,
+          email: `${openId}@example.com`,
+          loginMethod: "dev",
+          lastSignedIn: new Date(),
+        });
+        const token = await sdk.createSessionToken(openId, { name });
+        const cookieOptions = getSessionCookieOptions(req);
+        res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        res.json({ success: true, openId, name });
+      } catch (error) {
+        res.status(500).json({ error: String(error) });
+      }
+    });
+
+    app.get("/api/dev-logout", (req, res) => {
+      const cookieOptions = getSessionCookieOptions(req);
+      res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: 0 });
+      
+      // Also clear potential mismatched secure/non-secure cookies
+      const isSecure = cookieOptions.secure;
+      res.clearCookie(COOKIE_NAME, { 
+        ...cookieOptions, 
+        secure: !isSecure, 
+        sameSite: !isSecure ? 'none' : 'lax',
+        maxAge: 0 
+      });
+      
+      res.json({ success: true });
+    });
+    app.get("/api/db/health", async (_req, res) => {
+      try {
+        const conn = await db.getDb();
+        if (!conn) {
+          res.status(500).json({ ok: false, error: "database not configured" });
+          return;
+        }
+        await conn.select().from(users).limit(1);
+        res.json({ ok: true });
+      } catch (error) {
+        res.status(500).json({ ok: false, error: String(error) });
+      }
+    });
+  }
   // tRPC API
   app.use(
     "/api/trpc",

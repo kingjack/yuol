@@ -1,441 +1,407 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { COOKIE_NAME } from "@shared/const";
+import bcrypt from "bcryptjs";
+import { nanoid } from "nanoid";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import { sdk } from "./_core/sdk";
+
+import { carouselService } from "./services/carouselService";
 
 export const appRouter = router({
   system: systemRouter,
-  
-  auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return { success: true } as const;
-    }),
-  }),
 
-  // 用户相关
-  users: router({
-    getById: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        const user = await db.getUserById(input.id);
-        if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: '用户不存在' });
-        return user;
-      }),
-    
-    updateProfile: protectedProcedure
+  userTags: router({
+    add: protectedProcedure
       .input(z.object({
-        name: z.string().optional(),
-        avatar: z.string().optional(),
-        department: z.string().optional(),
-        position: z.string().optional(),
-        joinedAt: z.date().optional(),
-        bio: z.string().optional(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        return db.updateUserProfile(ctx.user.id, input);
-      }),
-    
-    search: publicProcedure
-      .input(z.object({ query: z.string() }))
-      .query(async ({ input }) => {
-        return db.searchUsers(input.query);
-      }),
-  }),
-
-  // 分类相关
-  categories: router({
-    list: publicProcedure.query(() => db.getCategories()),
-    
-    create: protectedProcedure
-      .input(z.object({
-        name: z.string(),
-        slug: z.string(),
-        description: z.string().optional(),
-        color: z.string().optional(),
+        userId: z.number(),
+        label: z.string().min(1).max(20),
       }))
       .mutation(async ({ input }) => {
-        return db.createCategory(input);
+        return db.addUserTag(input.userId, input.label);
       }),
-  }),
 
-  // 标签相关
-  tags: router({
-    list: publicProcedure.query(() => db.getTags()),
-    
-    create: protectedProcedure
-      .input(z.object({ name: z.string() }))
-      .mutation(async ({ input }) => {
-        return db.createTag(input.name);
-      }),
-  }),
-
-  // 帖子相关
-  posts: router({
     list: publicProcedure
       .input(z.object({
-        limit: z.number().default(20),
-        offset: z.number().default(0),
-        categoryId: z.number().optional(),
+        userId: z.number(),
       }))
       .query(async ({ input }) => {
-        if (input.categoryId) {
-          return db.getPostsByCategory(input.categoryId, input.limit);
-        }
-        return db.getPosts(input.limit, input.offset);
+        return db.getUserTags(input.userId);
       }),
-    
-    getById: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        const post = await db.getPostById(input.id);
-        if (!post) throw new TRPCError({ code: 'NOT_FOUND', message: '帖子不存在' });
-        
-        const author = await db.getUserById(post.authorId);
-        const tags = await db.getPostTags(input.id);
-        
-        return { ...post, author, tags: tags.map(t => t.tag) };
-      }),
-    
-    create: protectedProcedure
+
+    vote: protectedProcedure
       .input(z.object({
-        title: z.string().optional(),
-        content: z.string(),
-        images: z.string().optional(),
-        categoryId: z.number().optional(),
-        tagNames: z.array(z.string()).optional(),
+        tagId: z.number(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { tagNames, ...postData } = input;
-        const post = await db.createPost({
-          ...postData,
-          authorId: ctx.user.id,
-        });
-        
-        if (post && tagNames && tagNames.length > 0) {
-          for (const tagName of tagNames) {
-            const tag = await db.getOrCreateTag(tagName);
-            if (tag) {
-              await db.addPostTag(post.id, tag.id);
-            }
+        if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+        try {
+          await db.voteUserTag(input.tagId, ctx.user.id);
+          return { success: true };
+        } catch (error: any) {
+          if (error.message === "ALREADY_VOTED") {
+            throw new TRPCError({ code: "CONFLICT", message: "已经投过票了" });
           }
+          throw error;
         }
-        
-        return post;
-      }),
-    
-    update: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        title: z.string().optional(),
-        content: z.string().optional(),
-        images: z.string().optional(),
-        categoryId: z.number().optional(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const post = await db.getPostById(input.id);
-        if (!post) throw new TRPCError({ code: 'NOT_FOUND', message: '帖子不存在' });
-        if (post.authorId !== ctx.user.id && ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '无权限编辑此帖子' });
-        }
-        
-        const { id, ...updateData } = input;
-        return db.updatePost(id, updateData);
-      }),
-    
-    delete: protectedProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        const post = await db.getPostById(input.id);
-        if (!post) throw new TRPCError({ code: 'NOT_FOUND', message: '帖子不存在' });
-        if (post.authorId !== ctx.user.id && ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '无权限删除此帖子' });
-        }
-        
-        await db.deletePost(input.id);
-        return { success: true };
-      }),
-    
-    search: publicProcedure
-      .input(z.object({ query: z.string() }))
-      .query(async ({ input }) => {
-        return db.searchPosts(input.query);
       }),
   }),
 
-  // 文章相关
-  articles: router({
-    list: publicProcedure
-      .input(z.object({
-        limit: z.number().default(20),
-        offset: z.number().default(0),
-        publishedOnly: z.boolean().default(true),
-      }))
-      .query(async ({ input }) => {
-        return db.getArticles(input.publishedOnly, input.limit, input.offset);
-      }),
-    
-    getById: publicProcedure
-      .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
-        const article = await db.getArticleById(input.id);
-        if (!article) throw new TRPCError({ code: 'NOT_FOUND', message: '文章不存在' });
-        
-        await db.incrementArticleViews(input.id);
-        const author = await db.getUserById(article.authorId);
-        const tags = await db.getArticleTags(input.id);
-        
-        return { ...article, author, tags: tags.map(t => t.tag) };
-      }),
-    
-    create: protectedProcedure
-      .input(z.object({
-        title: z.string(),
-        content: z.string(),
-        coverImage: z.string().optional(),
-        summary: z.string().optional(),
-        categoryId: z.number().optional(),
-        published: z.boolean().default(false),
-        tagNames: z.array(z.string()).optional(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const { tagNames, ...articleData } = input;
-        const article = await db.createArticle({
-          ...articleData,
-          authorId: ctx.user.id,
-          publishedAt: input.published ? new Date() : undefined,
-        });
-        
-        if (article && tagNames && tagNames.length > 0) {
-          for (const tagName of tagNames) {
-            const tag = await db.getOrCreateTag(tagName);
-            if (tag) {
-              await db.addArticleTag(article.id, tag.id);
-            }
-          }
-        }
-        
-        return article;
-      }),
-    
-    update: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        title: z.string().optional(),
-        content: z.string().optional(),
-        coverImage: z.string().optional(),
-        summary: z.string().optional(),
-        categoryId: z.number().optional(),
-        published: z.boolean().optional(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const article = await db.getArticleById(input.id);
-        if (!article) throw new TRPCError({ code: 'NOT_FOUND', message: '文章不存在' });
-        if (article.authorId !== ctx.user.id && ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '无权限编辑此文章' });
-        }
-        
-        const { id, published, ...updateData } = input;
-        const finalData: any = { ...updateData };
-        if (published !== undefined) {
-          finalData.published = published;
-          if (published && !article.published) {
-            finalData.publishedAt = new Date();
-          }
-        }
-        
-        return db.updateArticle(id, finalData);
-      }),
-    
-    delete: protectedProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        const article = await db.getArticleById(input.id);
-        if (!article) throw new TRPCError({ code: 'NOT_FOUND', message: '文章不存在' });
-        if (article.authorId !== ctx.user.id && ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '无权限删除此文章' });
-        }
-        
-        await db.deleteArticle(input.id);
-        return { success: true };
-      }),
-    
-    search: publicProcedure
-      .input(z.object({ query: z.string() }))
-      .query(async ({ input }) => {
-        return db.searchArticles(input.query);
-      }),
-  }),
-
-  // 评论相关
-  comments: router({
-    list: publicProcedure
-      .input(z.object({
-        contentType: z.enum(['post', 'article']),
-        contentId: z.number(),
-      }))
-      .query(async ({ input }) => {
-        const comments = await db.getComments(input.contentType, input.contentId);
-        const commentsWithAuthors = await Promise.all(
-          comments.map(async (comment) => {
-            const author = await db.getUserById(comment.authorId);
-            return { ...comment, author };
-          })
-        );
-        return commentsWithAuthors;
-      }),
-    
-    create: protectedProcedure
-      .input(z.object({
-        contentType: z.enum(['post', 'article']),
-        contentId: z.number(),
-        content: z.string(),
-        parentId: z.number().optional(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const comment = await db.createComment({
-          ...input,
-          authorId: ctx.user.id,
-        });
-        
-        // 创建通知
-        let contentAuthorId: number | null = null;
-        if (input.contentType === 'post') {
-          const post = await db.getPostById(input.contentId);
-          if (post) contentAuthorId = post.authorId;
-        } else {
-          const article = await db.getArticleById(input.contentId);
-          if (article) contentAuthorId = article.authorId;
-        }
-        
-        if (contentAuthorId && contentAuthorId !== ctx.user.id) {
-          await db.createNotification({
-            userId: contentAuthorId,
-            actorId: ctx.user.id,
-            type: 'comment',
-            contentType: input.contentType,
-            contentId: input.contentId,
-          });
-        }
-        
-        return comment;
-      }),
-    
-    delete: protectedProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
-        const comments = await db.getComments('post', 0); // 临时查询
-        const comment = comments.find(c => c.id === input.id);
-        
-        if (!comment) throw new TRPCError({ code: 'NOT_FOUND', message: '评论不存在' });
-        if (comment.authorId !== ctx.user.id && ctx.user.role !== 'admin') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: '无权限删除此评论' });
-        }
-        
-        await db.deleteComment(input.id);
-        return { success: true };
-      }),
-  }),
-
-  // 点赞相关
-  likes: router({
-    toggle: protectedProcedure
-      .input(z.object({
-        contentType: z.enum(['post', 'article']),
-        contentId: z.number(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const result = await db.toggleLike(ctx.user.id, input.contentType, input.contentId);
-        
-        // 如果是点赞操作,创建通知
-        if (result.liked) {
-          let contentAuthorId: number | null = null;
-          if (input.contentType === 'post') {
-            const post = await db.getPostById(input.contentId);
-            if (post) contentAuthorId = post.authorId;
-          } else {
-            const article = await db.getArticleById(input.contentId);
-            if (article) contentAuthorId = article.authorId;
-          }
-          
-          if (contentAuthorId && contentAuthorId !== ctx.user.id) {
-            await db.createNotification({
-              userId: contentAuthorId,
-              actorId: ctx.user.id,
-              type: 'like',
-              contentType: input.contentType,
-              contentId: input.contentId,
-            });
-          }
-        }
-        
-        return result;
-      }),
-    
-    check: protectedProcedure
-      .input(z.object({
-        contentType: z.enum(['post', 'article']),
-        contentId: z.number(),
-      }))
-      .query(async ({ ctx, input }) => {
-        const liked = await db.checkUserLiked(ctx.user.id, input.contentType, input.contentId);
-        return { liked };
-      }),
-  }),
-
-  // 收藏相关
-  bookmarks: router({
-    toggle: protectedProcedure
-      .input(z.object({
-        contentType: z.enum(['post', 'article']),
-        contentId: z.number(),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        return db.toggleBookmark(ctx.user.id, input.contentType, input.contentId);
-      }),
-    
-    list: protectedProcedure
-      .input(z.object({
-        contentType: z.enum(['post', 'article']).optional(),
-      }))
-      .query(async ({ ctx, input }) => {
-        return db.getUserBookmarks(ctx.user.id, input.contentType);
-      }),
-  }),
-
-  // 通知相关
   notifications: router({
     list: protectedProcedure
       .input(z.object({
         unreadOnly: z.boolean().default(false),
+        limit: z.number().min(1).max(50).default(20),
       }))
       .query(async ({ ctx, input }) => {
-        const notifications = await db.getUserNotifications(ctx.user.id, input.unreadOnly);
-        const notificationsWithActors = await Promise.all(
-          notifications.map(async (notification) => {
-            const actor = await db.getUserById(notification.actorId);
-            return { ...notification, actor };
-          })
-        );
-        return notificationsWithActors;
+        return db.getNotifications(ctx.user.id, input.unreadOnly, input.limit);
       }),
-    
-    markAsRead: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      
+    markRead: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+      }))
       .mutation(async ({ input }) => {
         await db.markNotificationAsRead(input.id);
         return { success: true };
       }),
-    
-    markAllAsRead: protectedProcedure
+      
+    markAllRead: protectedProcedure
       .mutation(async ({ ctx }) => {
         await db.markAllNotificationsAsRead(ctx.user.id);
         return { success: true };
+      }),
+  }),
+  
+  auth: router({
+    register: publicProcedure
+      .input(z.object({
+        username: z.string().min(3, "用户名至少3个字符"),
+        password: z.string().min(6, "密码至少6个字符"),
+        name: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // 检查用户名是否存在
+        const existingUser = await db.getUserByUsername(input.username);
+        if (existingUser) {
+          throw new TRPCError({ code: "CONFLICT", message: "用户名已存在" });
+        }
+
+        // 哈希密码
+        const hashedPassword = await bcrypt.hash(input.password, 10);
+        const openId = `local:${input.username}`;
+
+        // 创建用户
+        await db.createUser({
+          openId,
+          username: input.username,
+          password: hashedPassword,
+          name: input.name || input.username,
+          loginMethod: "local",
+        });
+
+        // 创建 Session
+        const sessionToken = await sdk.createSessionToken(openId, {
+          name: input.name || input.username,
+          expiresInMs: ONE_YEAR_MS,
+        });
+
+        // 设置 Cookie
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+        return { success: true };
+      }),
+
+    login: publicProcedure
+      .input(z.object({
+        username: z.string(),
+        password: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const user = await db.getUserByUsername(input.username);
+        if (!user || !user.password) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "用户名或密码错误" });
+        }
+
+        const isValid = await bcrypt.compare(input.password, user.password);
+        if (!isValid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "用户名或密码错误" });
+        }
+
+        // 创建 Session
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || user.username || "",
+          expiresInMs: ONE_YEAR_MS,
+        });
+
+        // 设置 Cookie
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+        return { success: true };
+      }),
+
+    me: publicProcedure.query(opts => opts.ctx.user),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      
+      // Clear with current detected options
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: 0 });
+      
+      // Also clear potential mismatched secure/non-secure cookies
+      const isSecure = cookieOptions.secure;
+      ctx.res.clearCookie(COOKIE_NAME, { 
+        ...cookieOptions, 
+        secure: !isSecure, 
+        sameSite: !isSecure ? 'none' : 'lax',
+        maxAge: 0 
+      });
+      return { success: true };
+    }),
+  }),
+
+  // ============ 搜索 ============
+  search: router({
+    all: publicProcedure
+      .input(z.object({
+        query: z.string(),
+        limit: z.number().min(1).max(100).default(30),
+      }))
+      .query(async ({ input }) => {
+        return db.searchAll(input.query, input.limit);
+      }),
+  }),
+  
+  // ============ 用户 ============
+  users: router({
+    get: publicProcedure
+      .input(z.number())
+      .query(async ({ input }) => {
+        const user = await db.getUser(input);
+        if (!user) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "用户不存在" });
+        }
+        // 移除敏感信息
+        const { password, ...safeUser } = user;
+        return safeUser;
+      }),
+  }),
+
+  // ============ 轮播图 ============
+  carousels: router({
+    list: publicProcedure.query(async () => {
+      const items = await db.getActiveCarousels();
+      if (items.length === 0) {
+        console.log("[Carousel] No active carousels found, initializing default images...");
+        return await carouselService.resetAndFillBeautyImages();
+      }
+      return items;
+    }),
+    
+    // 管理员：重置并填充美女图片
+    resetAndFill: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        // 鉴权：仅管理员可操作
+        if (!ctx.user || ctx.user.role !== 'admin') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: '只有管理员可以执行此操作' });
+        }
+
+        try {
+          // 调用服务层逻辑
+          const result = await carouselService.resetAndFillBeautyImages();
+          return result;
+        } catch (error) {
+          console.error("Failed to reset carousels:", error);
+          throw new TRPCError({ 
+            code: 'INTERNAL_SERVER_ERROR', 
+            message: '重置轮播图失败' 
+          });
+        }
+      }),
+  }),
+
+  posts: router({
+    list: publicProcedure
+      .input(z.object({
+        limit: z.number().min(1).max(50).default(10),
+        offset: z.number().min(0).default(0),
+        categoryId: z.number().optional(),
+      }))
+      .query(async ({ input }) => {
+        return db.getPosts(input.limit, input.offset, input.categoryId);
+      }),
+    
+    get: publicProcedure
+      .input(z.number())
+      .query(async ({ input }) => {
+        const post = await db.getPost(input);
+        if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+        return post;
+      }),
+      
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().optional(),
+        content: z.string().min(1),
+        categoryId: z.number().optional(),
+        images: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return db.createPost({
+          ...input,
+          authorId: ctx.user.id,
+          images: input.images ? JSON.stringify(input.images) : undefined,
+        });
+      }),
+  }),
+
+  articles: router({
+    list: publicProcedure
+      .input(z.object({
+        limit: z.number().min(1).max(50).default(10),
+        offset: z.number().min(0).default(0),
+        categoryId: z.number().optional(),
+      }))
+      .query(async ({ input }) => {
+        return db.getArticles(input.limit, input.offset, input.categoryId);
+      }),
+
+    get: publicProcedure
+      .input(z.number())
+      .query(async ({ input }) => {
+        const article = await db.getArticle(input);
+        if (!article) throw new TRPCError({ code: "NOT_FOUND" });
+        return article;
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1),
+        content: z.string().min(1),
+        categoryId: z.number().optional(),
+        coverImage: z.string().optional(),
+        summary: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return db.createArticle({
+          ...input,
+          authorId: ctx.user.id,
+          published: true, // 默认直接发布
+        });
+      }),
+  }),
+
+  heartVoices: router({
+    list: publicProcedure
+      .input(z.object({
+        limit: z.number().min(1).max(50).default(10),
+        offset: z.number().min(0).default(0),
+      }))
+      .query(async ({ input }) => {
+        const voices = await db.getHeartVoices(input.limit, input.offset);
+        // 如果是匿名，需要处理作者信息
+        return voices.map(v => {
+          if (v.isAnonymous) {
+            // 返回不带作者信息的对象
+            const { author, ...rest } = v;
+            return {
+              ...rest,
+              author: null
+            };
+          }
+          return v;
+        });
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1),
+        content: z.string().min(1),
+        isAnonymous: z.boolean().default(false),
+        age: z.number().optional(),
+        gender: z.enum(["male", "female", "other"]).optional(),
+        location: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return db.createHeartVoice({
+          ...input,
+          authorId: ctx.user.id,
+        });
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteHeartVoice(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============ 评论 ============
+  comments: router({
+    list: publicProcedure
+      .input(z.object({
+        contentType: z.enum(["post", "article"]),
+        contentId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return db.getComments(input.contentType, input.contentId);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        contentType: z.enum(["post", "article"]),
+        contentId: z.number(),
+        content: z.string().min(1),
+        parentId: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return db.createComment({
+          content: input.content,
+          authorId: ctx.user.id,
+          postId: input.contentType === "post" ? input.contentId : null,
+          articleId: input.contentType === "article" ? input.contentId : null,
+          parentId: input.parentId,
+        });
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteComment(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============ 点赞 ============
+  likes: router({
+    toggle: protectedProcedure
+      .input(z.object({
+        contentType: z.enum(["post", "article", "comment"]),
+        contentId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return db.toggleLike(ctx.user.id, input.contentType, input.contentId);
+      }),
+  }),
+
+  // ============ 收藏 ============
+  bookmarks: router({
+    toggle: protectedProcedure
+      .input(z.object({
+        contentType: z.enum(["post", "article"]),
+        contentId: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return db.toggleBookmark(ctx.user.id, input.contentType, input.contentId);
       }),
   }),
 });
