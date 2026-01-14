@@ -268,6 +268,25 @@ export async function getHeartVoices(limit = 10, offset = 0) {
   }));
 }
 
+export async function getHeartVoice(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const results = await db.select()
+    .from(heartVoices)
+    .leftJoin(users, eq(heartVoices.authorId, users.id))
+    .where(eq(heartVoices.id, id))
+    .limit(1);
+    
+  if (results.length === 0) return null;
+  
+  const row = results[0];
+  return {
+    ...row.heart_voices,
+    author: row.users
+  };
+}
+
 export async function deleteHeartVoice(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

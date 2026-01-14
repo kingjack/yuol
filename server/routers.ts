@@ -317,6 +317,22 @@ export const appRouter = router({
         });
       }),
 
+    get: publicProcedure
+      .input(z.number())
+      .query(async ({ input }) => {
+        const voice = await db.getHeartVoice(input);
+        if (!voice) throw new TRPCError({ code: "NOT_FOUND", message: "心声不存在" });
+        
+        if (voice.isAnonymous) {
+          const { author, ...rest } = voice;
+          return {
+            ...rest,
+            author: null
+          };
+        }
+        return voice;
+      }),
+
     create: protectedProcedure
       .input(z.object({
         title: z.string().min(1),

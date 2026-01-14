@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -199,8 +199,12 @@ export default function HeartVoices() {
                   )}
                 </div>
 
-                <h3 className="text-lg font-semibold text-white mb-2">{voice.title}</h3>
-                <p className="text-gray-300 mb-4">{voice.content}</p>
+                <Link href={`/heart-voices/${voice.id}`}>
+                  <div className="cursor-pointer group block">
+                    <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-orange-400 transition-colors">{voice.title}</h3>
+                    <p className="text-gray-300 mb-4 line-clamp-3">{voice.content}</p>
+                  </div>
+                </Link>
 
                 <div className="flex gap-6 text-gray-400 text-sm">
                   <button className="flex items-center gap-2 hover:text-orange-400 transition-colors">

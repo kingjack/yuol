@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
 import Search from "./pages/Search";
 import HeartVoices from "./pages/HeartVoices";
+import HeartVoiceDetail from "./pages/HeartVoiceDetail";
 import ArticleEditor from "./pages/ArticleEditor";
 import ArticleDetail from "./pages/ArticleDetail";
 import Login from "./pages/Login";
@@ -31,6 +32,7 @@ function Router() {
       <Route path="/notifications" component={Notifications} />
       <Route path="/search" component={Search} />
       <Route path="/heart-voices" component={HeartVoices} />
+      <Route path="/heart-voices/:id" component={HeartVoiceDetail} />
       <Route path="/articles/new" component={ArticleEditor} />
       <Route path="/articles/:id" component={ArticleDetail} />
       <Route path="/404" component={NotFound} />
