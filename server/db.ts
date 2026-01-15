@@ -468,19 +468,38 @@ export async function searchAll(query: string, limit = 30) {
 export async function createComment(comment: InsertComment) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  
   const result = await db.insert(comments).values(comment);
+  
+  // 更新评论计数
+  if (comment.postId) {
+    await db.update(posts)
+      .set({ commentsCount: sql`${posts.commentsCount} + 1` })
+      .where(eq(posts.id, comment.postId));
+  } else if (comment.articleId) {
+    await db.update(articles)
+      .set({ commentsCount: sql`${articles.commentsCount} + 1` })
+      .where(eq(articles.id, comment.articleId));
+  } else if (comment.heartVoiceId) {
+    await db.update(heartVoices)
+      .set({ commentsCount: sql`${heartVoices.commentsCount} + 1` })
+      .where(eq(heartVoices.id, comment.heartVoiceId));
+  }
+
   return { ...comment, id: result[0].insertId };
 }
 
-export async function getComments(targetType: "post" | "article", targetId: number) {
+export async function getComments(targetType: "post" | "article" | "heartVoice", targetId: number) {
   const db = await getDb();
   if (!db) return [];
   
   const conditions = [];
   if (targetType === "post") {
     conditions.push(eq(comments.postId, targetId));
-  } else {
+  } else if (targetType === "article") {
     conditions.push(eq(comments.articleId, targetId));
+  } else {
+    conditions.push(eq(comments.heartVoiceId, targetId));
   }
 
   const results = await db.select()
@@ -496,9 +515,33 @@ export async function deleteComment(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  // 只能删除自己的评论
+  // 先查询评论以获取关联信息
+  const comment = await db.select().from(comments)
+    .where(and(eq(comments.id, id), eq(comments.authorId, userId)))
+    .limit(1);
+
+  if (comment.length === 0) return;
+
+  const target = comment[0];
+
+  // 删除评论
   await db.delete(comments)
-    .where(and(eq(comments.id, id), eq(comments.authorId, userId)));
+    .where(eq(comments.id, id));
+
+  // 更新计数
+  if (target.postId) {
+    await db.update(posts)
+      .set({ commentsCount: sql`${posts.commentsCount} - 1` })
+      .where(eq(posts.id, target.postId));
+  } else if (target.articleId) {
+    await db.update(articles)
+      .set({ commentsCount: sql`${articles.commentsCount} - 1` })
+      .where(eq(articles.id, target.articleId));
+  } else if (target.heartVoiceId) {
+    await db.update(heartVoices)
+      .set({ commentsCount: sql`${heartVoices.commentsCount} - 1` })
+      .where(eq(heartVoices.id, target.heartVoiceId));
+  }
 }
 
 // ============ 点赞相关 ============

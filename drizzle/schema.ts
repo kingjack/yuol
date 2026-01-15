@@ -124,6 +124,7 @@ export const comments = mysqlTable("comments", {
   authorId: int("authorId").notNull(),
   postId: int("postId"), // 可关联帖子
   articleId: int("articleId"), // 可关联文章
+  heartVoiceId: int("heartVoiceId"), // 可关联心声
   parentId: int("parentId"), // 父评论ID（回复）
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -131,6 +132,7 @@ export const comments = mysqlTable("comments", {
   authorIdx: index("comments_author_idx").on(table.authorId),
   postIdx: index("comments_post_idx").on(table.postId),
   articleIdx: index("comments_article_idx").on(table.articleId),
+  heartVoiceIdx: index("comments_heart_voice_idx").on(table.heartVoiceId),
   parentIdx: index("comments_parent_idx").on(table.parentId),
 }));
 

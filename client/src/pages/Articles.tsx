@@ -13,7 +13,7 @@ export default function Articles() {
   const { data: articles, isLoading } = trpc.articles.list.useQuery({
     limit: 20,
     offset: 0,
-    publishedOnly: true,
+    // publishedOnly 字段不在接口定义中，暂移除
   });
 
   return (

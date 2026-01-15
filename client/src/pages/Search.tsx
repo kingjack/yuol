@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,16 @@ export default function Search() {
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // 初始化时从 URL 获取搜索参数
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    if (q) {
+      setQuery(q);
+      setSearchQuery(q);
+    }
+  }, []);
   
   const { data: results, isLoading } = trpc.search.all.useQuery(
     { query: searchQuery, limit: 30 },
@@ -21,6 +31,9 @@ export default function Search() {
     e.preventDefault();
     if (query.trim()) {
       setSearchQuery(query);
+      // 更新 URL，方便分享
+      const newUrl = `/search?q=${encodeURIComponent(query)}`;
+      window.history.pushState(null, '', newUrl);
     }
   };
 
@@ -33,7 +46,7 @@ export default function Search() {
             <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-lg">✦</span>
             </div>
-            <h1 className="text-xl font-bold text-white">公司内部社区</h1>
+            <h1 className="text-xl font-bold text-white">内部社区</h1>
           </div>
           <div className="flex gap-4">
             <button onClick={() => setLocation('/')} className="text-gray-300 hover:text-white">

@@ -363,7 +363,7 @@ export const appRouter = router({
   comments: router({
     list: publicProcedure
       .input(z.object({
-        contentType: z.enum(["post", "article"]),
+        contentType: z.enum(["post", "article", "heartVoice"]),
         contentId: z.number(),
       }))
       .query(async ({ input }) => {
@@ -372,7 +372,7 @@ export const appRouter = router({
 
     create: protectedProcedure
       .input(z.object({
-        contentType: z.enum(["post", "article"]),
+        contentType: z.enum(["post", "article", "heartVoice"]),
         contentId: z.number(),
         content: z.string().min(1),
         parentId: z.number().optional(),
@@ -383,6 +383,7 @@ export const appRouter = router({
           authorId: ctx.user.id,
           postId: input.contentType === "post" ? input.contentId : null,
           articleId: input.contentType === "article" ? input.contentId : null,
+          heartVoiceId: input.contentType === "heartVoice" ? input.contentId : null,
           parentId: input.parentId,
         });
       }),

@@ -66,7 +66,7 @@ export default function Home() {
             <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-lg">✦</span>
             </div>
-            <h1 className="text-xl font-bold text-white">公司内部社区</h1>
+            <h1 className="text-xl font-bold text-white">内部社区</h1>
           </div>
           <div className="flex gap-4 items-center">
             <button onClick={() => setLocation('/posts')} className="text-gray-300 hover:text-white transition-colors">
@@ -379,7 +379,7 @@ export default function Home() {
             </div>
           </div>
           <div className="text-center text-gray-500 text-sm border-t border-orange-500/10 pt-4">
-            <p>&copy; 2025 公司内部社区. 所有权利保留.</p>
+            <p>&copy; 2025 快运社区. 所有权利保留.</p>
           </div>
         </footer>
       </div>

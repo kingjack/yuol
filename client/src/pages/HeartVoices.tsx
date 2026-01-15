@@ -6,9 +6,11 @@ import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Heart, MessageCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/_core/hooks/useAuth';
 
 export default function HeartVoices() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -180,16 +182,29 @@ export default function HeartVoices() {
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
                       <AvatarImage src={voice.author?.avatar || ''} />
-                      <AvatarFallback>{voice.author?.name?.[0] || '用'}</AvatarFallback>
+                      <AvatarFallback>
+                        {voice.isAnonymous ? '匿' : voice.author?.name?.[0] || '用'}
+                      </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-semibold text-white">{voice.author?.name || '用户'}</p>
+                      <p className="font-semibold text-white">
+                        {voice.isAnonymous ? '匿名用户' : voice.author?.name || '用户'}
+                      </p>
                       <p className="text-xs text-gray-400">
-                        {voice.age && `${voice.age}岁`} {voice.gender && `·${voice.gender === 'male' ? '男' : voice.gender === 'female' ? '女' : '其他'}`} {voice.location && `·${voice.location}`}
+                        {voice.age && `${voice.age}岁`}{' '}
+                        {voice.gender &&
+                          `·${
+                            voice.gender === 'male'
+                              ? '男'
+                              : voice.gender === 'female'
+                              ? '女'
+                              : '其他'
+                          }`}{' '}
+                        {voice.location && `·${voice.location}`}
                       </p>
                     </div>
                   </div>
-                  {voice.author?.id && (
+                  {user && voice.author?.id === user.id && (
                     <button
                       onClick={() => deleteMutation.mutate({ id: voice.id })}
                       className="text-gray-400 hover:text-red-400 transition-colors"
