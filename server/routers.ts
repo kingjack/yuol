@@ -145,7 +145,12 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      const user = opts.ctx.user;
+      if (!user) return null;
+      const { password, ...safeUser } = user;
+      return safeUser;
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       
@@ -186,6 +191,23 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND", message: "用户不存在" });
         }
         // 移除敏感信息
+        const { password, ...safeUser } = user;
+        return safeUser;
+      }),
+
+    updateAvatar: protectedProcedure
+      .input(z.object({
+        avatar: z.string().url().min(1).nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ctx.user) {
+          throw new TRPCError({ code: "UNAUTHORIZED" });
+        }
+        await db.updateUserAvatar(ctx.user.id, input.avatar);
+        const user = await db.getUser(ctx.user.id);
+        if (!user) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "用户不存在" });
+        }
         const { password, ...safeUser } = user;
         return safeUser;
       }),

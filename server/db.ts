@@ -102,6 +102,14 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 }
 
+export async function updateUserAvatar(userId: number, avatarUrl: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users)
+    .set({ avatar: avatarUrl })
+    .where(eq(users.id, userId));
+}
+
 export async function getUser(id: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -125,13 +133,18 @@ export async function getAllUsers() {
 export async function searchUsers(query: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(users).where(
+  const results = await db.select().from(users).where(
     or(
       like(users.name, `%${query}%`),
       like(users.department, `%${query}%`),
       like(users.position, `%${query}%`)
     )
   );
+  
+  return results.map(user => {
+    const { password, ...safeUser } = user;
+    return safeUser;
+  });
 }
 
 // ============ 分类相关 ============
@@ -176,7 +189,11 @@ export async function getPost(id: number) {
   if (result.length === 0) return undefined;
   
   const { posts: post, users: author } = result[0];
-  return { ...post, author };
+  if (author) {
+    const { password, ...safeAuthor } = author;
+    return { ...post, author: safeAuthor };
+  }
+  return { ...post, author: null };
 }
 
 export async function getPosts(limit = 10, offset = 0, categoryId?: number) {
@@ -196,7 +213,13 @@ export async function getPosts(limit = 10, offset = 0, categoryId?: number) {
   }
   
   const results = await query;
-  return results.map(({ posts, users }) => ({ ...posts, author: users }));
+  return results.map(({ posts, users }) => {
+    if (users) {
+      const { password, ...safeAuthor } = users;
+      return { ...posts, author: safeAuthor };
+    }
+    return { ...posts, author: null };
+  });
 }
 
 // ============ 文章相关 ============
@@ -220,7 +243,11 @@ export async function getArticle(id: number) {
   if (result.length === 0) return undefined;
   
   const { articles: article, users: author } = result[0];
-  return { ...article, author };
+  if (author) {
+    const { password, ...safeAuthor } = author;
+    return { ...article, author: safeAuthor };
+  }
+  return { ...article, author: null };
 }
 
 export async function getArticles(limit = 10, offset = 0, categoryId?: number) {
@@ -240,7 +267,13 @@ export async function getArticles(limit = 10, offset = 0, categoryId?: number) {
   }
   
   const results = await query;
-  return results.map(({ articles, users }) => ({ ...articles, author: users }));
+  return results.map(({ articles, users }) => {
+    if (users) {
+      const { password, ...safeAuthor } = users;
+      return { ...articles, author: safeAuthor };
+    }
+    return { ...articles, author: null };
+  });
 }
 
 // ============ 树洞相关 ============
@@ -262,10 +295,17 @@ export async function getHeartVoices(limit = 10, offset = 0) {
     .offset(offset)
     .orderBy(desc(heartVoices.createdAt));
     
-  return results.map(({ heart_voices, users }) => ({
-    ...heart_voices,
-    author: users
-  }));
+  return results.map(({ heart_voices, users }) => {
+    let safeAuthor = null;
+    if (users) {
+      const { password, ...rest } = users;
+      safeAuthor = rest;
+    }
+    return {
+      ...heart_voices,
+      author: safeAuthor
+    };
+  });
 }
 
 export async function getHeartVoice(id: number) {
@@ -281,9 +321,15 @@ export async function getHeartVoice(id: number) {
   if (results.length === 0) return null;
   
   const row = results[0];
+  let safeAuthor = null;
+  if (row.users) {
+    const { password, ...rest } = row.users;
+    safeAuthor = rest;
+  }
+  
   return {
     ...row.heart_voices,
-    author: row.users
+    author: safeAuthor
   };
 }
 
@@ -458,9 +504,24 @@ export async function searchAll(query: string, limit = 30) {
     .limit(limit);
 
   return {
-    posts: postsResults.map(({ posts, users }) => ({ ...posts, author: users })),
-    articles: articlesResults.map(({ articles, users }) => ({ ...articles, author: users })),
-    users: usersResults
+    posts: postsResults.map(({ posts, users }) => {
+      if (users) {
+        const { password, ...safeAuthor } = users;
+        return { ...posts, author: safeAuthor };
+      }
+      return { ...posts, author: null };
+    }),
+    articles: articlesResults.map(({ articles, users }) => {
+      if (users) {
+        const { password, ...safeAuthor } = users;
+        return { ...articles, author: safeAuthor };
+      }
+      return { ...articles, author: null };
+    }),
+    users: usersResults.map(user => {
+      const { password, ...safeUser } = user;
+      return safeUser;
+    })
   };
 }
 
@@ -508,7 +569,13 @@ export async function getComments(targetType: "post" | "article" | "heartVoice",
     .where(and(...conditions))
     .orderBy(desc(comments.createdAt));
 
-  return results.map(({ comments, users }) => ({ ...comments, author: users }));
+  return results.map(({ comments, users }) => {
+    if (users) {
+      const { password, ...safeAuthor } = users;
+      return { ...comments, author: safeAuthor };
+    }
+    return { ...comments, author: null };
+  });
 }
 
 export async function deleteComment(id: number, userId: number) {

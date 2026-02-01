@@ -118,7 +118,6 @@ export function UserAvatarWithTags({
             {user.name?.[0]?.toUpperCase() || "U"}
           </AvatarFallback>
         </Avatar>
-        
         {/* Add Tag Button (visible on hover) */}
         {editable && user.id > 0 && (
           <Popover open={isAddTagOpen} onOpenChange={setIsAddTagOpen}>
