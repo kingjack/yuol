@@ -15,32 +15,48 @@ export const carouselService = {
     // 1. 清除现有轮播图
     await clearAllCarousels();
 
-    // 2. 生成新数据
-    const today = new Date().toISOString().slice(0, 10);
-    const styles = [
-      { title: '清纯校花', prompt: 'beautiful asian school girl, pure face, black hair, natural makeup, soft sunlight, high school uniform, 8k photography' },
-      { title: '职场丽人', prompt: 'professional asian business woman, office lady, white shirt, elegant smile, modern office background, cinematic lighting, photorealistic' },
-      { title: '古风汉服', prompt: 'chinese traditional hanfu girl, ancient style, elegant, garden background, ethereal, masterpiece, best quality' },
-      { title: '街拍潮流', prompt: 'trendy asian fashion model, street snap, shanghai street background, stylish outfit, cool vibe, 35mm film look' },
-      { title: '运动活力', prompt: 'fit asian girl, gym wear, yoga, healthy lifestyle, sweat, energetic smile, bright lighting, realistic skin texture' }
+    // 2. 使用 Unsplash Source API (免费、稳定、高质量)
+    const carouselItems = [
+      {
+        title: '团队协作',
+        imageUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&h=600&fit=crop',
+        linkUrl: '#',
+        order: 0,
+        isActive: true
+      },
+      {
+        title: '创新思维',
+        imageUrl: 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=1200&h=600&fit=crop',
+        linkUrl: '#',
+        order: 1,
+        isActive: true
+      },
+      {
+        title: '高效办公',
+        imageUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&h=600&fit=crop',
+        linkUrl: '#',
+        order: 2,
+        isActive: true
+      },
+      {
+        title: '技术分享',
+        imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=1200&h=600&fit=crop',
+        linkUrl: '#',
+        order: 3,
+        isActive: true
+      },
+      {
+        title: '轻松氛围',
+        imageUrl: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=1200&h=600&fit=crop',
+        linkUrl: '#',
+        order: 4,
+        isActive: true
+      }
     ];
 
     const newItems = [];
 
-    for (let i = 0; i < styles.length; i++) {
-      const style = styles[i];
-      const seed = `${today}-${i}`; // 确保当天图片一致
-      // 使用 Pollinations API
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(style.prompt)}?width=1200&height=600&nologo=true&seed=${seed}&model=flux-realism`;
-
-      const item = {
-        title: style.title,
-        imageUrl: imageUrl,
-        linkUrl: '#',
-        order: i,
-        isActive: true
-      };
-
+    for (const item of carouselItems) {
       await createCarousel(item);
       newItems.push(item);
     }
@@ -48,10 +64,5 @@ export const carouselService = {
     console.log(`[Carousel] Created ${newItems.length} new images.`);
     return newItems;
   },
-
-  // 保留旧方法以兼容（如果还有其他地方用到），或者直接移除
-  // 既然 routers.ts 只有 resetAndFillBeautyImages，我们可以只保留这个，
-  // 但为了安全起见，如果不确定是否被移除，可以暂时不导出或者删掉旧代码。
-  // 鉴于 user request 是 fix missing method，我会完全替换内容以匹配需求。
 };
 
